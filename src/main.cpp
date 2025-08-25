@@ -35,6 +35,8 @@ static bool has_changed = false;
 
 static int main_screen = SCREEN_HOME;
 static int main_sub_mode = HOME_PLAY_MUSIC;
+static uint32_t last_active_ms = 0;
+static uint32_t last_time_change_smile_ms = 0;
 
 /******************************************************************************/
 /*                              EXPORTED DATA                                 */
@@ -109,6 +111,7 @@ void setup() {
     /* Initialize components */
     audio_init();
     lvgl_gui_init();
+    last_active_ms = millis();
 }
 
 void loop() {
@@ -141,11 +144,13 @@ static void home_menu_loop(void) {
     }
 
     if (M5.BtnC.wasReleased()) {
+        last_active_ms = millis();
         main_sub_mode = (main_sub_mode + 1) % HOME_SUB_COUNT;
         lvgl_set_menu_mode(main_screen, main_sub_mode);
     }
 
     if (M5.BtnA.wasReleased()) {
+        last_active_ms = millis();
         main_sub_mode = (main_sub_mode + HOME_SUB_COUNT - 1) % HOME_SUB_COUNT;
         lvgl_set_menu_mode(main_screen, main_sub_mode);
     }
@@ -254,7 +259,6 @@ static void sdcard_menu_loop(void) {
  * @brief  Handle smile menu process
  */
 static void smile_menu_loop(void) {
-    static uint32_t last_time_change_ms;
     static bool auto_change = true;
 
     /* --- Hold A and C: Back to Home --- */
@@ -272,7 +276,7 @@ static void smile_menu_loop(void) {
     /* --- Button A: Prev image --- */
     if (M5.BtnA.wasReleased()) {
         lvgl_change_prev_smile();
-        last_time_change_ms = millis();
+        last_time_change_smile_ms = millis();
     }
 
     /* --- Button B: Toggle auto change --- */
@@ -283,7 +287,7 @@ static void smile_menu_loop(void) {
     /* --- Button C: Next image --- */
     if (M5.BtnC.wasReleased()) {
         lvgl_change_next_smile();
-        last_time_change_ms = millis();
+        last_time_change_smile_ms = millis();
     }
 
     if (!auto_change) {
@@ -291,9 +295,9 @@ static void smile_menu_loop(void) {
     }
 
     /* Change images automatically */
-    uint32_t elapsed = millis() - last_time_change_ms;
+    uint32_t elapsed = millis() - last_time_change_smile_ms;
     if (elapsed >= 10000) {
-        last_time_change_ms = millis();
+        last_time_change_smile_ms = millis();
         lvgl_change_next_smile();
     }
 }
@@ -304,25 +308,34 @@ static void smile_menu_loop(void) {
 static void control_loop(void) {
     static uint32_t last_time_update_ms;
     uint8_t battery;
+    uint32_t elapsed;
 
     switch (main_screen) {
         case SCREEN_PLAY_MUSIC:
             sdcard_menu_loop();
+            last_active_ms = millis();
             break;
 
         case SCREEN_SMILE:
             smile_menu_loop();
-            last_time_update_ms = millis();
+            last_active_ms = millis();
             break;
 
         case SCREEN_HOME:
         default:
             home_menu_loop();
+            last_time_change_smile_ms = millis();
             break;
     }
 
+    elapsed = millis() - last_active_ms;
+    if (elapsed > 10000) {
+        last_active_ms = millis();
+        M5.Power.powerOff();
+    }
+
     /* Update system informations */
-    uint32_t elapsed = millis() - last_time_update_ms;
+    elapsed = millis() - last_time_update_ms;
     if ((elapsed < 10000) && (!has_changed)) {
         return;
     }

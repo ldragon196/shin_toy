@@ -41,6 +41,7 @@ static bool next_track_requested = false;    /* Indicates if the next track is r
 static std::vector<String> music_files;      /* List of .wav files in /music folder */
 static int current_track_index = 0;          /* Current track index */
 static bool playing_smile = false;
+static bool normal_mode = true;
 
 /******************************************************************************/
 /*                              EXPORTED DATA                                 */
@@ -137,6 +138,10 @@ static bool play_single_wav(const char* filename) {
             break;
         }
 
+        if ((!normal_mode) && (!playing_smile)) {
+            break;
+        }
+
         if (!is_running) {
             M5.delay(10);
             continue;
@@ -169,11 +174,13 @@ static bool play_single_wav(const char* filename) {
 static void play_audio_task(void *arg) {
     while (1) {
         if (playing_smile) {
+            normal_mode = false;
             play_single_wav("/smile_sound.wav");
             continue;
         }
 
         if (is_running && !music_files.empty()) {
+            normal_mode = true;
             const String &file_to_play = music_files[current_track_index];
             Serial.printf("Now playing: %s\r\n", file_to_play.c_str());
             lvgl_set_song_name(file_to_play.c_str());
@@ -208,14 +215,8 @@ void audio_play_splash(void) {
  * @brief  Play smile mode audio
  */
 void audio_set_smile_mode(bool playing) {
-    if (playing) {
-        is_running = true;
-        playing_smile = true;
-    }
-    else {
-        is_running = false;
-        playing_smile = false;
-    }
+    is_running = playing;
+    playing_smile = playing;
 }
 
 /*!

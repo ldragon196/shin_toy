@@ -81,11 +81,6 @@ extern const lv_img_dsc_t image18;
 extern const lv_img_dsc_t image19;
 extern const lv_img_dsc_t image20;
 extern const lv_img_dsc_t image21;
-extern const lv_img_dsc_t image22;
-extern const lv_img_dsc_t image23;
-extern const lv_img_dsc_t image24;
-extern const lv_img_dsc_t image25;
-extern const lv_img_dsc_t image26;
 
 /******************************************************************************/
 /*                                FUNCTIONS                                   */
@@ -344,11 +339,6 @@ static void lvgl_ui_init(void) {
     image_src_list[smile_image_max++] = &image19;
     image_src_list[smile_image_max++] = &image20;
     image_src_list[smile_image_max++] = &image21;
-    image_src_list[smile_image_max++] = &image22;
-    image_src_list[smile_image_max++] = &image23;
-    image_src_list[smile_image_max++] = &image24;
-    image_src_list[smile_image_max++] = &image25;
-    image_src_list[smile_image_max++] = &image26;
     lv_img_set_src(ui_image_smile, image_src_list[0]);
 }
 
