@@ -38,6 +38,13 @@ static int main_sub_mode = HOME_PLAY_MUSIC;
 static uint32_t last_active_ms = 0;
 static uint32_t last_time_change_smile_ms = 0;
 
+static bool is_save_A = false;
+static bool is_save_C = false;
+static bool is_holding_A = false;
+static bool is_holding_C = false;
+static uint32_t hold_start_time_A = 0;
+static uint32_t hold_start_time_C = 0;
+
 /******************************************************************************/
 /*                              EXPORTED DATA                                 */
 /******************************************************************************/
@@ -87,11 +94,15 @@ void save_configuration(void) {
  * @brief  Run splash screen
  */
 void run_splash(void) {
-    delay(100);    /* Wait for lvgl is initialized */
+    delay(10);    /* Wait for lvgl is initialized */
+    M5.Display.drawPngFile(SPIFFS, "/co_viet_nam.png", 0, 0);
+    M5.update();
+    delay(2000);
     M5.Display.drawJpgFile(SPIFFS, "/shin.jpg", 0, 0);
     M5.update();
     M5.Speaker.setVolume(255);
     audio_play_splash();
+    delay(200);
 }
 
 void setup() {
@@ -111,6 +122,8 @@ void setup() {
     /* Initialize components */
     audio_init();
     lvgl_gui_init();
+    lvgl_set_battery(M5.Power.getBatteryLevel());
+    lvgl_set_play_state(false);
     last_active_ms = millis();
 }
 
@@ -160,13 +173,6 @@ static void home_menu_loop(void) {
  * @brief  Handle sdcard menu process
  */
 static void sdcard_menu_loop(void) {
-    static bool is_save_A = false;
-    static bool is_save_C = false;
-    static bool is_holding_A = false;
-    static bool is_holding_C = false;
-    static uint32_t hold_start_time_A = 0;
-    static uint32_t hold_start_time_C = 0;
-
     uint32_t now = millis();
 
     /* --- Hold A and C: Back to Home --- */
@@ -175,11 +181,19 @@ static void sdcard_menu_loop(void) {
         audio_running = false;
         audio_set_running(audio_running);
         lvgl_set_menu_mode(main_screen, main_sub_mode);
+        lvgl_set_play_state(audio_running);
         has_changed = true;
         while ((M5.BtnC.pressedFor(HOLDING_BACK_TIME_MS) || M5.BtnA.pressedFor(HOLDING_BACK_TIME_MS))) {
             M5.update(); M5.delay(10);
         }
         return;
+    }
+
+    /* --- Button A: Prev Audio --- */
+    if (M5.BtnA.wasReleased()) {
+        if (!is_holding_A) {
+            audio_prev_request();
+        }
     }
 
     /* --- Button B: Toggle Play/Pause --- */
@@ -190,68 +204,11 @@ static void sdcard_menu_loop(void) {
         lvgl_set_play_state(audio_running);
     }
 
-    /* --- Button C: Skip to Next Track OR Increase Volume on Hold --- */
-    if (M5.BtnC.pressedFor(HOLDING_TIME_MS) && !M5.BtnA.isPressed()) {
-        is_holding_C = true;
-    }
-
+    /* --- Button C: Next Audio --- */
     if (M5.BtnC.wasReleased()) {
         if (!is_holding_C) {
             audio_next_request();
         }
-        is_holding_C = false;
-        has_changed = true;
-
-        if (is_save_C) {
-            is_save_C = false;
-            save_configuration();
-        }
-    }
-
-    if (is_holding_C && (now - hold_start_time_C >= CHANGE_VOL_INTERVAL_MS)) {
-        hold_start_time_C = now;
-
-        if (current_volume <= 250) {
-            current_volume += 5;
-            M5.Speaker.setVolume(current_volume);
-            is_save_C = true;
-        }
-    }
-
-    if (M5.BtnC.wasPressed()) {
-        hold_start_time_C = now;
-    }
-
-    /* --- Button A: Hold to Decrease Volume --- */
-    if (M5.BtnA.pressedFor(HOLDING_TIME_MS) && !M5.BtnC.isPressed()) {
-        is_holding_A = true;
-    }
-
-    if (M5.BtnA.wasReleased()) {
-        if (!is_holding_A) {
-            audio_prev_request();
-        }
-        is_holding_A = false;
-        has_changed = true;
-
-        if (is_save_A) {
-            is_save_A = false;
-            save_configuration();
-        }
-    }
-
-    if (is_holding_A && (now - hold_start_time_A >= CHANGE_VOL_INTERVAL_MS)) {
-        hold_start_time_A = now;
-
-        if (current_volume >= 5) {
-            current_volume -= 5;
-            M5.Speaker.setVolume(current_volume);
-            is_save_A = true;
-        }
-    }
-
-    if (M5.BtnA.wasPressed()) {
-        hold_start_time_A = now;
     }
 }
 
@@ -275,8 +232,10 @@ static void smile_menu_loop(void) {
 
     /* --- Button A: Prev image --- */
     if (M5.BtnA.wasReleased()) {
-        lvgl_change_prev_smile();
-        last_time_change_smile_ms = millis();
+        if (!is_holding_A) {
+            lvgl_change_prev_smile();
+            last_time_change_smile_ms = millis();
+        }
     }
 
     /* --- Button B: Toggle auto change --- */
@@ -286,8 +245,10 @@ static void smile_menu_loop(void) {
 
     /* --- Button C: Next image --- */
     if (M5.BtnC.wasReleased()) {
-        lvgl_change_next_smile();
-        last_time_change_smile_ms = millis();
+        if (!is_holding_C) {
+            lvgl_change_next_smile();
+            last_time_change_smile_ms = millis();
+        }
     }
 
     if (!auto_change) {
@@ -328,10 +289,71 @@ static void control_loop(void) {
             break;
     }
 
-    elapsed = millis() - last_active_ms;
+    uint32_t now = millis();
+    elapsed = now - last_active_ms;
     if (elapsed > 10000) {
-        last_active_ms = millis();
+        last_active_ms = now;
         M5.Power.powerOff();
+    }
+
+    if (main_screen != SCREEN_HOME) {
+        /* --- Button C: Skip to Next Track OR Increase Volume on Hold --- */
+        if (M5.BtnC.pressedFor(HOLDING_TIME_MS) && !M5.BtnA.isPressed()) {
+            is_holding_C = true;
+        }
+
+        if (M5.BtnC.wasReleased()) {
+            is_holding_C = false;
+            has_changed = true;
+
+            if (is_save_C) {
+                is_save_C = false;
+                save_configuration();
+            }
+        }
+
+        if (is_holding_C && (now - hold_start_time_C >= CHANGE_VOL_INTERVAL_MS)) {
+            hold_start_time_C = now;
+
+            if (current_volume <= 250) {
+                current_volume += 5;
+                M5.Speaker.setVolume(current_volume);
+                is_save_C = true;
+            }
+        }
+
+        if (M5.BtnC.wasPressed()) {
+            hold_start_time_C = now;
+        }
+
+        /* --- Button A: Hold to Decrease Volume --- */
+        if (M5.BtnA.pressedFor(HOLDING_TIME_MS) && !M5.BtnC.isPressed()) {
+            is_holding_A = true;
+        }
+
+        if (M5.BtnA.wasReleased()) {
+            is_holding_A = false;
+            has_changed = true;
+
+            if (is_save_A) {
+                is_save_A = false;
+                save_configuration();
+            }
+        }
+
+        if (is_holding_A && (now - hold_start_time_A >= CHANGE_VOL_INTERVAL_MS)) {
+            hold_start_time_A = now;
+
+            if (current_volume >= 5) {
+                current_volume -= 5;
+                M5.Speaker.setVolume(current_volume);
+                is_save_A = true;
+            }
+        }
+
+        if (M5.BtnA.wasPressed()) {
+            hold_start_time_A = now;
+        }
     }
 
     /* Update system informations */

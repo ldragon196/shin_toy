@@ -144,6 +144,9 @@ static bool play_single_wav(const char* filename) {
 
         if (!is_running) {
             M5.delay(10);
+            if (playing_smile) {
+                break;
+            }
             continue;
         }
 
@@ -207,7 +210,7 @@ static void play_audio_task(void *arg) {
 void audio_play_splash(void) {
     is_running = true;
     play_single_wav("/hi_shin.wav");
-    play_single_wav("/funny.wav");
+    // play_single_wav("/funny.wav");
     is_running = false;
 }
 
